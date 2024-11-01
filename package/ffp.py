@@ -1,4 +1,6 @@
-# Recheck files
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 from rich.console import Console
 from rich.table import Table
 from typing import Literal
