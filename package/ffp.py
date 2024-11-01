@@ -1,3 +1,4 @@
+# Recheck files
 from rich.console import Console
 from rich.table import Table
 from typing import Literal
@@ -5,9 +6,37 @@ import os
 import pkg_resources
 import sys
 import json
+import time
+import ast
 
 modes = Literal [ 'in_front_of', 'on_call', 'equals_with' ]
 licenses_ = Literal [ 'MIT', 'Apache', 'BSD', 'Unlicense', 'Zlib' ]
+licenses_list = [ 'MIT', 'Apache', 'BSD', 'Unlicense', 'Zlib' ]
+
+def getWorker() -> str:
+    path = os.getcwd()
+
+    if "/" in path:
+        return path.split("/")[-1]
+    elif "\\" in path:
+        return path.split("\\")[-1]
+    else:return path
+
+def getImportedModules(file_path) -> list:
+    with open(file_path, 'r') as file:
+        node = ast.parse(file.read(), filename=file_path)
+    
+    imports = set()
+    for elem in ast.walk(node):
+        if isinstance(elem, ast.Import):
+            for alias in elem.names:
+                imports.add(alias.name)
+        elif isinstance(elem, ast.ImportFrom):
+            imports.add(elem.module)
+    
+    return list(imports)
+
+# def handleAllFiles()
 
 class Licenses(object):
     def __init__(self):
@@ -213,7 +242,7 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
         
         self.bsd_license = """Copyright (c) {} {}. All rights reserved.
 
-Redistribution and use in source and binary forms are permitted provided that the above copyright notice and this paragraph are duplicated in all such forms and that any documentation, advertising materials, and other materials related to such distribution and use acknowledge that the software was developed by the <copyright holder>. The name of the <copyright holder> may not be used to endorse or promote products derived from this software without specific prior written permission. THIS SOFTWARE IS PROVIDED `'AS IS″ AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE."""
+Redistribution and use in source and binary forms are permitted provided that the above copyright notice and this paragraph are duplicated in all such forms and that any documentation, advertising materials, and other materials related to such distribution and use acknowledge that the software was developed by the {}. The name of the {} may not be used to endorse or promote products derived from this software without specific prior written permission. THIS SOFTWARE IS PROVIDED `'AS IS″ AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE."""
 
         self.Unlicense = """This is free and unencumbered software released into the public domain.
 
@@ -269,7 +298,7 @@ freely, subject to the following restrictions:
         
         if license == "MIT":return self.mit_license.format(kwargs.get("name"), kwargs.get("year"))
         elif license == "Apache":return self.apache_license.format(kwargs.get("name"), kwargs.get("year"))
-        elif license == "BSD":return self.bsd_license.format(kwargs.get("name"), kwargs.get("year"))
+        elif license == "BSD":return self.bsd_license.format(kwargs.get("name"), kwargs.get("year"), kwargs.get("name"), kwargs.get("name"))
         elif license == "Unlicense":return self.Unlicense.format(kwargs.get("name"), kwargs.get("year"))
         elif license == "Zlib":return self.zlib_license.format(kwargs.get("name"), kwargs.get("year"))
         else:return "<Unkown License>"
@@ -586,19 +615,117 @@ def onConfigYear(things: Things):
 def onShow(things: Things):
     ...
 
+@buffer.on("--which", mode="on_call")
+def onWhich(things: Things):
+    if not things.which == "NONECALL":
+        if things.which == True:
+            console.print(licenses_list)
+
 @buffer.on("--license", mode="equals_with")
 def onCreate(things: Things):
     if not things.license == "NONECALL":
         if not things.license == "NONEEQUALS":
             if not getattr(things, "config.name") in ("NONECALL", "NONEEQUALS"):
                 if not getattr(things, "config.year") in ("NONECALL", "NONEEQUALS"):
-                    abs_license = lis.create(things.license, name=getattr(things, "config.name"), year=getattr(things, "config.year"))
-                    if things.show == True:
-                        console.print()
-                        console.print(abs_license)
-                    else:setattr(things, "license_result", abs_license)
+                    if things.license in licenses_list:
+                        abs_license = lis.create(things.license, name=getattr(things, "config.name"), year=getattr(things, "config.year"))
+                        if things.show == True:
+                            console.print()
+                            console.print(abs_license)
+                        else:setattr(things, "license_result", abs_license);setattr(things, "which_license", things.license);setattr(things, "license_author", getattr(things, "config.name"));setattr(things, "license_year", getattr(things, "config.year"))
+                    else:console.print("[yellow]FFP[/yellow] [red]error[/red][bold white] Entered License is not Available, try [green]'--which'[/green] to see available licenses")
                 else:console.print("[yellow]FFP[/yellow] [red]error[/red][bold white] Year was not set in Config")
             else:console.print("[yellow]FFP[/yellow] [red]error[/red][bold white] Name was not Set in Config")
         else:console.print("[yellow]FFP[/yellow] [red]error[/red][bold white] License was not Select")
+
+@buffer.on("--pack", mode="on_call")
+def onPacking(things: Things):
+    if not things.pack == "NONECALL":
+        if hasattr(things, "license_result"):
+            note = {
+                "author": things.license_author,
+                "package_name": getWorker(),
+                "package_version": "1.0.0",
+                "lisence": things.which_license,
+                "license_year": things.license_year,
+                "license_wrote_in": time.ctime(time.time()),
+                "lisence_text": things.license_result
+            }
+
+            with open("pack.json", "w") as file:
+                file.write(json.dumps(note, indent=4, ensure_ascii=False))
+                file.close()
+
+            console.print(note)
+        else:console.print("[yellow]FFP[/yellow] [red]error[/red][bold white] License information was not enter")
+
+@buffer.on("--help", mode="on_call")
+def onHelp(things: Things):
+    if things.help == True:
+        table = Table.grid(padding=1, pad_edge=True)
+        console.print("FFP Table :butterfly:", justify="center")
+        table.add_column("Argument", no_wrap=True, justify="left")
+        table.add_column("Description", justify="center")
+
+        table.add_row(
+            "[bold white]--help [cyan]<NONE INPUT>[/cyan]",
+            "[yellow]Show the Help Message"
+        )
+
+        table.add_row(
+            "[bold white]--packages [cyan]<NONE INPUT>[/cyan]",
+            "[yellow]Table to See All Installed Packages"
+        )
+
+        table.add_row(
+            "[bold white]--which [cyan]<NONE INPUT>[/cyan]",
+            "[yellow]List of Licenses"
+        )
+
+        table.add_row(
+            "[bold white]--show [cyan]<NONE INPUT>[/cyan]",
+            "[yellow]See the License Result"
+        )
+        
+        table.add_row(
+            "[bold white]--fetch [cyan]<PACKAGE NAME>[/cyan]",
+            "[yellow]Install a Package\n"
+            "[blue]Usage: [purple]--fetch[white]=[bold white]requests"
+        )
+
+        table.add_row(
+            "[bold white]--license [cyan]<LICENSE(s)>[/cyan]",
+            "[yellow]Select a License, use [green]'--which'[/green] to "
+            "See All Licenses \n"
+            "[blue]Usage: [purple]--license[white]=[bold white]MIT"
+        )
+
+        table.add_row(
+            "[bold white]--config [cyan]<.ATTRIBUTES>[/cyan]",
+            "[yellow]Attributes: [bold white][ [green]'name'[/green][white], [green]'year'[/green] [bold white]] \n"
+            "[blue]Usage: [white]--config[white].[purple]name[white]=[bold white]Jack [red]|[blue] [white]--config[white].[purple]year[white]=[bold cyan]2024"
+        )
+
+        table.add_row(
+            "[bold white]--pack [cyan]<NONE INPUT>[/cyan]",
+            "[yellow]Create a file named [green]'pack.json'[/green]\n"
+            "[blue]Keys: [bold white][ [green]'author'[white],\n"
+            "[green]'package_name'[white], [green]'package_version'[white],\n"
+            "[green]'license'[white], [green]'license_year'[white],\n"
+            "[green]'license_wrote_in'[white], [green]'license_text'[white] [bold white]]"
+        )
+
+        console.print(table)
+
+buffer.setFilter(
+    [
+        "--help",
+        "--packages", "--which",
+        "--show", "--fetch",
+        "--license", "--pack",
+        "--config.name", "--config.year"
+    ],
+    "Invalid Argument: B@ARGV\ntry `--help` to see usage"
+)
 
 buffer.trust()
